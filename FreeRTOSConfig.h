@@ -25,7 +25,6 @@
  * 1 tab == 4 spaces!
  */
 
-
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
@@ -41,18 +40,21 @@
  * See http://www.freertos.org/a00110.html
  *----------------------------------------------------------*/
 
-/* Ensure stdint is only used by the compiler, and not the assembler. */
+/* Ensure definitions are only used by the compiler, and not by the assembler. */
+#if defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__)
+#include <assert.h>
 #include <stdint.h>
 extern uint32_t SystemCoreClock;
+#endif
 
 #define configUSE_PREEMPTION            1
 #define configUSE_IDLE_HOOK             0
 #define configUSE_TICK_HOOK             0
 #define configCPU_CLOCK_HZ              (SystemCoreClock)
-#define configTICK_RATE_HZ              ((TickType_t) 1000)
+#define configTICK_RATE_HZ              ((TickType_t)1000)
 #define configMAX_PRIORITIES            5
-#define configMINIMAL_STACK_SIZE        ((unsigned short) 130)
-#define configTOTAL_HEAP_SIZE           ((size_t)(75 * 1024))
+#define configMINIMAL_STACK_SIZE        ((unsigned short)130)
+#define configTOTAL_HEAP_SIZE           ((size_t)(125 * 1024))
 #define configMAX_TASK_NAME_LEN         10
 #define configUSE_TRACE_FACILITY        0
 #define configUSE_16_BIT_TICKS          0
@@ -89,10 +91,10 @@ to exclude the API function. */
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
-	/* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */
-	#define configPRIO_BITS __NVIC_PRIO_BITS
+    /* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */
+    #define configPRIO_BITS __NVIC_PRIO_BITS
 #else
-	#define configPRIO_BITS 4 /* 15 priority levels */
+    #define configPRIO_BITS 4 /* 15 priority levels */
 #endif
 
 /* The lowest interrupt priority that can be used in a call to a "set priority"
@@ -112,9 +114,7 @@ to all Cortex-M ports, and do not rely on any particular library functions. */
 See http://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html. */
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY (configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY << (8 - configPRIO_BITS))
 
-/* Normal assert() semantics without relying on the provision of an assert.h
-header file. */
-#define configASSERT( x ) if( ( x ) == 0 ) { taskDISABLE_INTERRUPTS(); for( ;; ); }
+#define configASSERT(x) assert(x)
 
 /* Definitions that map the FreeRTOS port interrupt handlers to their CMSIS
 standard names. */
