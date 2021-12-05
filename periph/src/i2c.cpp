@@ -17,11 +17,6 @@ constexpr auto i2c_fast_max_speed = 400000; // bps
 
 static i2c *obj_list[i2c::I2C_END];
 
-#if configUSE_TRACE_FACILITY
-static traceHandle isr_dma_tx, isr_dma_rx, isr_i2c_event, isr_i2c_error;
-static traceString ch1;
-#endif
-
 i2c::i2c(i2c_t i2c, uint32_t baud, dma &dma_tx, dma &dma_rx, gpio &sda,
     gpio &scl):
     _i2c(i2c),
@@ -46,14 +41,6 @@ i2c::i2c(i2c_t i2c, uint32_t baud, dma &dma_tx, dma &dma_rx, gpio &sda,
     assert(_scl.mode() == gpio::mode::AF);
     
     assert(api_lock = xSemaphoreCreateMutex());
-    
-#if configUSE_TRACE_FACILITY
-    vTraceSetMutexName((void *)api_lock, "i2c_api_lock");
-    isr_dma_tx = xTraceSetISRProperties("ISR_dma_i2c_tx", 1);
-    isr_dma_rx = xTraceSetISRProperties("ISR_dma_i2c_rx", 1);
-    isr_i2c_event = xTraceSetISRProperties("ISR_i2c_event", 1);
-    isr_i2c_error = xTraceSetISRProperties("ISR_i2c_error", 1);
-#endif
     
     obj_list[_i2c] = this;
     
@@ -222,58 +209,28 @@ void i2c::on_dma_tx(dma *dma, dma::event_t event, void *ctx)
 {
     if(event == dma::EVENT_HALF)
         return;
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISRBegin(isr_dma_tx);
-#endif
+    
     i2c *obj = static_cast<i2c *>(ctx);
     BaseType_t hi_task_woken = 0;
     
     if(event == dma::EVENT_CMPLT)
-    {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "tx_hndlr");
-#endif
         tx_hndlr(obj, &hi_task_woken);
-    }
     else if(event == dma::EVENT_ERROR)
-    {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "err_hndlr");
-#endif
         err_hndlr(obj, RES_TX_FAIL, &hi_task_woken);
-    }
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISREnd(hi_task_woken);
-#endif
 }
 
 void i2c::on_dma_rx(dma *dma, dma::event_t event, void *ctx)
 {
     if(event == dma::EVENT_HALF)
         return;
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISRBegin(isr_dma_rx);
-#endif
+    
     i2c *obj = static_cast<i2c *>(ctx);
     BaseType_t hi_task_woken = 0;
     
     if(event == dma::EVENT_CMPLT)
-    {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "rx_hndlr");
-#endif
         rx_hndlr(obj, &hi_task_woken);
-    }
     else if(event == dma::EVENT_ERROR)
-    {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "err_hndlr");
-#endif
         err_hndlr(obj, RES_RX_FAIL, &hi_task_woken);
-    }
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISREnd(hi_task_woken);
-#endif
 }
 
 extern "C" void tx_hndlr(i2c *obj, BaseType_t *hi_task_woken)
@@ -339,14 +296,8 @@ extern "C" void i2c_event_irq_hndlr(i2c *obj)
     I2C_TypeDef *i2c = i2c_priv::i2c[obj->_i2c];
     uint16_t sr1 = i2c->SR1;
     
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISRBegin(isr_i2c_event);
-#endif
     if(sr1 & I2C_SR1_SB)
     {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "send address");
-#endif
         // Start condition is sent. Need to send device address
         i2c->DR = (obj->_addr << 1) | (obj->tx_buff ? 0 : 1);
     }
@@ -356,9 +307,6 @@ extern "C" void i2c_event_irq_hndlr(i2c *obj)
         // Device address is sent. Need to send/receive data
         if(obj->tx_buff)
         {
-#if configUSE_TRACE_FACILITY
-            vTracePrint(ch1, "start tx dma");
-#endif
             obj->tx_dma.src(obj->tx_buff);
             obj->tx_dma.size(obj->tx_size);
             obj->tx_dma.start_once(obj->on_dma_tx, obj);
@@ -370,9 +318,6 @@ extern "C" void i2c_event_irq_hndlr(i2c *obj)
             else
                 i2c->CR1 &= ~I2C_CR1_ACK;
             
-#if configUSE_TRACE_FACILITY
-            vTracePrint(ch1, "start rx dma");
-#endif
             obj->rx_dma.dst(obj->rx_buff);
             obj->rx_dma.size(obj->rx_size);
             obj->rx_dma.start_once(obj->on_dma_rx, obj);
@@ -383,9 +328,6 @@ extern "C" void i2c_event_irq_hndlr(i2c *obj)
         // Clear BTF flag
         uint32_t dr = i2c->DR;
     }
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISREnd(0);
-#endif
 }
 
 extern "C" void i2c_error_irq_hndlr(i2c *obj)
@@ -394,17 +336,10 @@ extern "C" void i2c_error_irq_hndlr(i2c *obj)
     uint32_t sr1 = i2c->SR1;
     uint32_t sr2 = i2c->SR2;
     uint32_t dr = i2c->DR;
-
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISRBegin(isr_i2c_error);
-    vTracePrint(ch1, "Error irq");
-#endif
+    
     BaseType_t hi_task_woken = 0;
     if(sr1 & I2C_SR1_AF)
     {
-#if configUSE_TRACE_FACILITY
-        vTracePrint(ch1, "AF irq");
-#endif
         // No ACK from device
         // NAK irq flag doesn't work during receiving using DMA.
         // When slave sends NAK, master still wait for some data.
@@ -428,9 +363,6 @@ extern "C" void i2c_error_irq_hndlr(i2c *obj)
         i2c->SR1 &= ~I2C_SR1_BERR;
         err_hndlr(obj, i2c::RES_TX_FAIL, &hi_task_woken);
     }
-#if configUSE_TRACE_FACILITY
-    vTraceStoreISREnd(hi_task_woken);
-#endif
 }
 
 extern "C" void I2C1_EV_IRQHandler(void)
